@@ -376,9 +376,6 @@ func (session *Session) Select(p interface{}) error {
 		return err
 	}
 
-
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-
 	db := session.Engine.Db
 
 	stmtOut, err := db.Prepare(sqlstr)
@@ -810,20 +807,50 @@ func (session *Session) setValues(columns []string, values []sql.RawBytes, t ref
 			switch f.Kind() {
 			case reflect.String:
 				f.SetString(value)
-			case reflect.Int:
-				intV, e := strconv.ParseInt(value, 10, 64)
+			case
+				reflect.Int,
+				reflect.Int8,
+				reflect.Int16,
+				reflect.Int32,
+				reflect.Int64:
+
+					intV, e := strconv.ParseInt(value, 10, 64)
+					if e != nil {
+						f.SetInt(0)
+					} else {
+						f.SetInt(intV)
+					}
+			case
+				reflect.Uint,
+				reflect.Uint8,
+				reflect.Uint16,
+				reflect.Uint32,
+				reflect.Uint64:
+
+					intV, e := strconv.ParseUint(value, 10, 64)
+					if e != nil {
+						f.SetUint(0)
+					} else {
+						f.SetUint(intV)
+					}
+			case
+				reflect.Float64,
+				reflect.Float32:
+
+					floatV, e := strconv.ParseFloat(value,64)
+					if e != nil {
+						f.SetFloat(0)
+					} else {
+						f.SetFloat(floatV)
+					}
+			case reflect.Bool:
+				boolV, e := strconv.ParseBool(value)
 				if e != nil {
-					f.SetInt(0)
+					f.SetBool(false)
 				} else {
-					f.SetInt(intV)
+					f.SetBool(boolV)
 				}
-			case reflect.Float64:
-				floatV, e := strconv.ParseFloat(value,64)
-				if e != nil {
-					f.SetFloat(0)
-				} else {
-					f.SetFloat(floatV)
-				}
+
 			}
 		}
 
