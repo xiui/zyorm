@@ -74,11 +74,11 @@ func (session *Session)Query(args ...interface{}) ([]map[string]string, error) {
 
 	var maps []map[string]string
 
-	for _, values := range valuess {
+	for _, values := range *valuess {
 
 		mapElement := make(map[string]string)
 		for i, column := range columns {
-			mapElement[column] = string(values[i])
+			mapElement[column] = string((*values)[i])
 		}
 
 		maps = append(maps, mapElement)
@@ -288,6 +288,8 @@ func (session *Session) Delete() (int64, error) {
 
 func (session *Session) Find(p interface{}) (bool, error) {
 
+	//因为查 1 条, limit 直接设置成 1
+	session.Limit(1)
 
 	defer session.clearSession()
 
@@ -305,19 +307,55 @@ func (session *Session) Find(p interface{}) (bool, error) {
 		return false, err
 	}
 
-	columns, valuess, err := session.getRows(sqlstr)
+	//根据 sql 查数据
+	db := session.Engine.Db
 
+	stmtOut, err := db.Prepare(sqlstr)
 	if err != nil {
+		log.Printf("prepare error: %s", err)
+		return false, err
+	}
+	defer stmtOut.Close()
+
+	rows, err := stmtOut.Query(session.args...)
+	if err != nil {
+		log.Printf("Query error: %s", err)
 		return false, err
 	}
 
-	if len(valuess) < 1 {
-		return false, nil
+	if err = rows.Err(); err != nil {
+		log.Printf("rows Err: %s", err)
+		return false, err
+	}
+	defer rows.Close()
+
+
+	columns, err := rows.Columns()
+	if err != nil {
+		log.Printf("get Columns error: %s", err)
+		return false, err
 	}
 
-	session.setValues(columns, valuess[0], t, realV)
-	return true, nil
+	//只查一条, 所以不用循环
+	rows.Next()
 
+	//切片是地址, 所以每次都重新创建 values, scanArgs
+	values := make([]sql.RawBytes, len(columns))
+
+	scanArgs := make([]interface{}, len(values))
+	for i := range values {
+		scanArgs[i] = &values[i]
+	}
+
+	err = rows.Scan(scanArgs...)
+	if err != nil {
+		log.Printf("get Scan error: %s", err)
+		return false, err
+	}
+
+	session.setValues(columns, values, t, realV)
+
+	return true, nil
 
 }
 
@@ -339,30 +377,66 @@ func (session *Session) Select(p interface{}) error {
 	}
 
 
-	columns, valuess, err := session.getRows(sqlstr)
+	//////////////////////////////////////////////////////////////////////////////////////////////////
 
+	db := session.Engine.Db
+
+	stmtOut, err := db.Prepare(sqlstr)
 	if err != nil {
+		log.Printf("prepare error: %s", err)
+		return err
+	}
+
+	defer stmtOut.Close()
+
+	rows, err := stmtOut.Query(session.args...)
+	if err != nil {
+		log.Printf("Query error: %s", err)
+		return err
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("rows Err: %s", err)
+		return err
+	}
+
+	defer rows.Close()
+
+
+	columns, err := rows.Columns()
+	if err != nil {
+		log.Printf("get Columns error: %s", err)
 		return err
 	}
 
 
 	elements := make([]reflect.Value, 0)
 
-	for _, values := range valuess {
+	//循环输出 mysql 返回数据
+	for rows.Next() {
 
+		//切片是地址, 所以每次都重新创建 values, scanArgs
+		values := make([]sql.RawBytes, len(columns))
+
+		scanArgs := make([]interface{}, len(values))
+		for i := range values {
+			scanArgs[i] = &values[i]
+		}
+
+		err = rows.Scan(scanArgs...)
+		if err != nil {
+			log.Printf("get Scan error: %s", err)
+			return err
+		}
 
 		session.setValues(columns, values, t, v)
-
 		elements = append(elements, reflect.ValueOf(v.Interface()))
+
 	}
-
-
 	tmp := reflect.Append(realV, elements...)
 	realV.Set(tmp)
 
 	return nil
-
-
 
 }
 
@@ -722,7 +796,6 @@ func (session *Session) setValues(columns []string, values []sql.RawBytes, t ref
 
 	tableInfo := session.Engine.Tables[t.Name()]
 
-
 	for i, column := range columns {
 
 		fieldInfo := tableInfo.Fields[column]
@@ -867,7 +940,7 @@ func (session *Session) getSqlStr(t reflect.Type) (string, error) {
 	return sqlstr, nil
 }
 
-func (session *Session) getRows(sqlstr string) ([]string, [][]sql.RawBytes, error) {
+func (session *Session) getRows(sqlstr string) ([]string, *[]*[]sql.RawBytes, error) {
 
 
 	db := session.Engine.Db
@@ -889,7 +962,7 @@ func (session *Session) getRows(sqlstr string) ([]string, [][]sql.RawBytes, erro
 		log.Printf("rows Err: %s", err)
 		return nil, nil, err
 	}
-
+	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
@@ -897,9 +970,11 @@ func (session *Session) getRows(sqlstr string) ([]string, [][]sql.RawBytes, erro
 		return nil, nil, err
 	}
 
-	//TODO: 名字后期修改一下
-	var valuess [][]sql.RawBytes
 
+	var allValues = make([]*[]sql.RawBytes, 0)
+
+
+	//循环输出 mysql 返回数据
 	for rows.Next() {
 
 		//切片是地址, 所以每次都重新创建 values, scanArgs
@@ -908,6 +983,8 @@ func (session *Session) getRows(sqlstr string) ([]string, [][]sql.RawBytes, erro
 		scanArgs := make([]interface{}, len(values))
 		for i := range values {
 			scanArgs[i] = &values[i]
+
+			fmt.Printf("value-%d: ,%p\n", i, &values[i])
 		}
 
 		err = rows.Scan(scanArgs...)
@@ -916,10 +993,40 @@ func (session *Session) getRows(sqlstr string) ([]string, [][]sql.RawBytes, erro
 			return nil, nil, err
 		}
 
-		valuess = append(valuess, values)
+		fmt.Println("cap: ", cap(allValues))
+		fmt.Println("len: ", len(allValues))
+
+		fmt.Println("00000000000000000000000000")
+		for i, v := range values {
+			fmt.Println(columns[i] + "_value: ", v)
+			fmt.Println(columns[i] + "_value: ", string(v))
+
+			//fmt.Printf("%s_point: %p, len: %d", columns[i], &v, len(v))
+
+			fmt.Println()
+		}
+		//TODO 数据量比较大的时候, allValues 中的数据会出错
+		allValues = append(allValues, &values)
+
+		//fmt.Printf("values: %p\n", &values)
+		fmt.Println("11111111111111111111111111")
+		//for _, va := range allValues {
+		//
+		//	//fmt.Printf("allValues: %p\n", va)
+		//	//for i, v := range *va {
+		//	//	//fmt.Println(columns[i] + "_value: " + string(v))
+		//	//
+		//	//	//fmt.Printf("%s_point: %p, len: %d\n", columns[i], &v, len(v))
+		//	//}
+		//	//fmt.Println()
+		//}
+		fmt.Println("2222222222222222222222222")
+
 	}
 
-	return columns, valuess, nil
+
+
+	return columns, &allValues, nil
 
 
 }
