@@ -11,10 +11,12 @@ import (
 )
 
 type Engine struct {
-	Db *sql.DB
+	db *sql.DB
 
-	RWMuTables *sync.RWMutex
-	Tables map[string]TableInfo
+	ShowSql bool
+
+	rwMuTables *sync.RWMutex
+	tables map[string]TableInfo
 
 }
 
@@ -51,7 +53,7 @@ func NewEngine(dnsConf DnsConf) (*Engine, error) {
 		return nil, err
 	}
 
-	engine := &Engine{Db: db, RWMuTables:new(sync.RWMutex), Tables: make(map[string]TableInfo)}
+	engine := &Engine{db: db, rwMuTables:new(sync.RWMutex), tables: make(map[string]TableInfo)}
 
 	return engine, nil
 
@@ -127,17 +129,17 @@ func (engine *Engine) Group(group string) *Session {
 	return session.Group(group)
 }
 
-func (engine *Engine) Join(join string) *Session {
+func (engine *Engine) Join(join string, args... interface{}) *Session {
 
 	session := engine.createSession()
 
-	return session.Join(join)
+	return session.Join(join, args...)
 }
 
 func (engine *Engine) registerTable(t reflect.Type) error {
 
-	engine.RWMuTables.Lock()
-	defer engine.RWMuTables.Unlock()
+	engine.rwMuTables.Lock()
+	defer engine.rwMuTables.Unlock()
 
 	structName := t.Name()
 
@@ -197,7 +199,7 @@ func (engine *Engine) registerTable(t reflect.Type) error {
 		tableInfo.RWRuField.Unlock()
 	}
 
-	engine.Tables[structName] = tableInfo
+	engine.tables[structName] = tableInfo
 
 	return nil
 }

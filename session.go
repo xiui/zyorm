@@ -26,6 +26,8 @@ type Session struct {
 	joins []string
 
 	args []interface{}
+	joinArgs []interface{}
+	whereArgs []interface{}
 
 	prepare string	//直接写 sql 时使用
 
@@ -33,7 +35,7 @@ type Session struct {
 
 func (session *Session) Begin() error {
 	var err error
-	session.Tx, err = session.Engine.Db.Begin()
+	session.Tx, err = session.Engine.db.Begin()
 	return err
 }
 
@@ -66,6 +68,11 @@ func (session *Session)Query(args ...interface{}) ([]map[string]string, error) {
 	}
 
 	session.args = args
+
+	//根据设置输出 sql
+	if session.Engine.ShowSql {
+		session.printSql(session.prepare)
+	}
 
 	columns, valuess,err := session.getRows(session.prepare)
 	if err != nil {
@@ -124,8 +131,10 @@ func (session *Session) Insert(data map[string]interface{}) (int64, error) {
 
 	sqlstr := "INSERT " + session.TableName + kstr + " VALUES " + vstr
 
-	fmt.Println(sqlstr)
-
+	//根据设置输出 sql
+	if session.Engine.ShowSql {
+		session.printSql(sqlstr)
+	}
 
 	var stmtIns *sql.Stmt
 	var err error
@@ -133,7 +142,7 @@ func (session *Session) Insert(data map[string]interface{}) (int64, error) {
 	if session.Tx != nil {
 		stmtIns, err = session.Tx.Prepare(sqlstr)
 	} else {
-		stmtIns, err = session.Engine.Db.Prepare(sqlstr)
+		stmtIns, err = session.Engine.db.Prepare(sqlstr)
 	}
 
 
@@ -192,25 +201,25 @@ func (session *Session) Update(data map[string]interface{}) (int64, error) {
 
 	if len(session.where) > 0 {
 		sqlstr += " WHERE " + session.where
-		args = append(args, session.args...)
+		args = append(args, session.whereArgs...)
 	}
 
-	fmt.Println(args)
-	fmt.Println(sqlstr)
+	//根据设置输出 sql
+	if session.Engine.ShowSql {
+		session.printSql(sqlstr)
+	}
 
 	var stmtIns *sql.Stmt
 	var err error
 
-	fmt.Println(session.Tx)
 
 	if session.Tx != nil {
 		stmtIns, err = session.Tx.Prepare(sqlstr)
 	} else {
-		stmtIns, err = session.Engine.Db.Prepare(sqlstr)
+		stmtIns, err = session.Engine.db.Prepare(sqlstr)
 	}
 
-	fmt.Println(stmtIns)
-	fmt.Println(err)
+
 
 	if err != nil {
 		return 0, err
@@ -219,11 +228,6 @@ func (session *Session) Update(data map[string]interface{}) (int64, error) {
 	defer stmtIns.Close()
 
 	ret, err := stmtIns.Exec(args...)
-
-	lastsql,_ :=ret.RowsAffected()
-
-	fmt.Println("ret:", lastsql)
-	fmt.Println(err)
 
 	if err != nil {
 		return 0, err
@@ -251,9 +255,13 @@ func (session *Session) Delete() (int64, error) {
 		return 0, errors.New("delete 必须设置 where")
 	}
 
+	session.args = append(session.args, session.whereArgs...)
 	sqlstr := "DELETE FROM " + session.TableName + " WHERE " + session.where
 
-	fmt.Println(sqlstr)
+	//根据设置输出 sql
+	if session.Engine.ShowSql {
+		session.printSql(sqlstr)
+	}
 
 	var stmtIns *sql.Stmt
 	var err error
@@ -261,7 +269,7 @@ func (session *Session) Delete() (int64, error) {
 	if session.Tx != nil {
 		stmtIns, err = session.Tx.Prepare(sqlstr)
 	} else {
-		stmtIns, err = session.Engine.Db.Prepare(sqlstr)
+		stmtIns, err = session.Engine.db.Prepare(sqlstr)
 	}
 
 	if err != nil {
@@ -302,13 +310,17 @@ func (session *Session) Find(p interface{}) (bool, error) {
 
 
 	sqlstr, err := session.getSqlStr(t)
+	//根据设置输出 sql
+	if session.Engine.ShowSql {
+		session.printSql(sqlstr)
+	}
 
 	if err != nil {
 		return false, err
 	}
 
 	//根据 sql 查数据
-	db := session.Engine.Db
+	db := session.Engine.db
 
 	stmtOut, err := db.Prepare(sqlstr)
 	if err != nil {
@@ -372,11 +384,17 @@ func (session *Session) Select(p interface{}) error {
 
 	sqlstr, err := session.getSqlStr(t)
 
+	//根据设置输出 sql
+	if session.Engine.ShowSql {
+		session.printSql(sqlstr)
+	}
+
+
 	if err != nil {
 		return err
 	}
 
-	db := session.Engine.Db
+	db := session.Engine.db
 
 	stmtOut, err := db.Prepare(sqlstr)
 	if err != nil {
@@ -443,6 +461,12 @@ func (session *Session) Count() (int64, error) {
 
 	if len(session.where) > 0 {
 		s += " WHERE " + session.where
+		session.args = append(session.args, session.whereArgs...)
+	}
+
+	//根据设置输出 sql
+	if session.Engine.ShowSql {
+		session.printSql(s)
 	}
 
 	m, err := session.Prepare(s).Query(session.args...)
@@ -560,8 +584,9 @@ func (session *Session) Group(group string) *Session {
 	return session
 }
 
-func (session *Session) Join(join string) *Session {
+func (session *Session) Join(join string, args ...interface{}) *Session {
 	session.joins = append(session.joins, join)
+	session.joinArgs = append(session.joinArgs, args...)
 	return session
 }
 
@@ -603,7 +628,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 
 			session.where += "=?"
 
-			session.args = append(session.args, v)
+			session.whereArgs = append(session.whereArgs, v)
 
 		case []interface{}:
 
@@ -621,7 +646,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 					session.where += t + " ? "
 
 
-					session.args = append(session.args, v1)
+					session.whereArgs = append(session.whereArgs, v1)
 
 
 				case "IN":
@@ -629,7 +654,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 					switch v1.(type) {
 					case string, int, float64:
 						session.where += t + " (?) "
-						session.args = append(session.args, v1)
+						session.whereArgs = append(session.whereArgs, v1)
 					case []int:
 						session.where += t + " ("
 
@@ -641,7 +666,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 								session.where += " ,? "
 							}
 
-							session.args = append(session.args, intv)
+							session.whereArgs = append(session.whereArgs, intv)
 						}
 						session.where += " ) "
 					case []string:
@@ -655,7 +680,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 								session.where += " ,? "
 							}
 
-							session.args = append(session.args, intv)
+							session.whereArgs = append(session.whereArgs, intv)
 						}
 						session.where += " ) "
 					case []float64:
@@ -669,7 +694,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 								session.where += " ,? "
 							}
 
-							session.args = append(session.args, intv)
+							session.whereArgs = append(session.whereArgs, intv)
 						}
 						session.where += " ) "
 					case []interface{}:
@@ -683,7 +708,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 								session.where += " ,? "
 							}
 
-							session.args = append(session.args, intv)
+							session.whereArgs = append(session.whereArgs, intv)
 						}
 						session.where += " ) "
 					}
@@ -695,7 +720,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 						v3 := v.([]interface{})[2]
 
 						session.where += t + " ? and ? "
-						session.args = append(session.args, v2, v3)
+						session.whereArgs = append(session.whereArgs, v2, v3)
 
 					} else if len(v.([]interface{})) < 3 {
 
@@ -714,7 +739,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 										session.where += " and ? "
 									}
 
-									session.args = append(session.args, intv)
+									session.whereArgs = append(session.whereArgs, intv)
 								}
 							}
 						case []float64:
@@ -730,7 +755,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 										session.where += " and ? "
 									}
 
-									session.args = append(session.args, intv)
+									session.whereArgs = append(session.whereArgs, intv)
 								}
 							}
 
@@ -747,7 +772,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 										session.where += " and ? "
 									}
 
-									session.args = append(session.args, intv)
+									session.whereArgs = append(session.whereArgs, intv)
 								}
 							}
 						case []interface{}:
@@ -763,7 +788,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 										session.where += " and ? "
 									}
 
-									session.args = append(session.args, intv)
+									session.whereArgs = append(session.whereArgs, intv)
 
 								}
 							}
@@ -791,7 +816,7 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 
 func (session *Session) setValues(columns []string, values []sql.RawBytes, t reflect.Type, v reflect.Value)  {
 
-	tableInfo := session.Engine.Tables[t.Name()]
+	tableInfo := session.Engine.tables[t.Name()]
 
 	for i, column := range columns {
 
@@ -799,10 +824,11 @@ func (session *Session) setValues(columns []string, values []sql.RawBytes, t ref
 
 		valueBytes := values[i]
 
+		f := v.FieldByName(fieldInfo.AttrName)
+
 		if valueBytes != nil {
 			value := string(valueBytes)
 
-			f := v.FieldByName(fieldInfo.AttrName)
 
 			switch f.Kind() {
 			case reflect.String:
@@ -850,6 +876,32 @@ func (session *Session) setValues(columns []string, values []sql.RawBytes, t ref
 				} else {
 					f.SetBool(boolV)
 				}
+			}
+		} else {
+			switch f.Kind() {
+			case reflect.String:
+				f.SetString("")
+			case
+				reflect.Int,
+				reflect.Int8,
+				reflect.Int16,
+				reflect.Int32,
+				reflect.Int64:
+					f.SetInt(0)
+			case
+				reflect.Uint,
+				reflect.Uint8,
+				reflect.Uint16,
+				reflect.Uint32,
+				reflect.Uint64:
+					f.SetUint(0)
+			case
+				reflect.Float64,
+				reflect.Float32:
+					f.SetFloat(0)
+			case reflect.Bool:
+					f.SetBool(false)
+
 
 			}
 		}
@@ -891,7 +943,7 @@ func (session *Session) getReflects(p interface{}) (reflect.Type, reflect.Value,
 }
 
 func (session *Session) getSqlStr(t reflect.Type) (string, error) {
-	tableInfo, ok := session.Engine.Tables[t.Name()]
+	tableInfo, ok := session.Engine.tables[t.Name()]
 
 	if !ok {
 
@@ -900,7 +952,7 @@ func (session *Session) getSqlStr(t reflect.Type) (string, error) {
 			return "", err
 		}
 
-		tableInfo = session.Engine.Tables[t.Name()]
+		tableInfo = session.Engine.tables[t.Name()]
 	}
 
 
@@ -944,10 +996,12 @@ func (session *Session) getSqlStr(t reflect.Type) (string, error) {
 		sqlstr += " " + join
 
 	}
+	session.args = append(session.args, session.joinArgs...)
 
 
 	if len(session.where) > 0 {
 		sqlstr += " WHERE " + session.where
+		session.args = append(session.args, session.whereArgs...)
 	}
 
 	if len(session.order) > 0 {
@@ -962,7 +1016,6 @@ func (session *Session) getSqlStr(t reflect.Type) (string, error) {
 		sqlstr += " GROUP BY " + session.group
 	}
 
-	fmt.Println(sqlstr)
 
 	return sqlstr, nil
 }
@@ -970,7 +1023,7 @@ func (session *Session) getSqlStr(t reflect.Type) (string, error) {
 func (session *Session) getRows(sqlstr string) ([]string, *[]*[]sql.RawBytes, error) {
 
 
-	db := session.Engine.Db
+	db := session.Engine.db
 
 	stmtOut, err := db.Prepare(sqlstr)
 	if err != nil {
@@ -1020,34 +1073,9 @@ func (session *Session) getRows(sqlstr string) ([]string, *[]*[]sql.RawBytes, er
 			return nil, nil, err
 		}
 
-		fmt.Println("cap: ", cap(allValues))
-		fmt.Println("len: ", len(allValues))
-
-		fmt.Println("00000000000000000000000000")
-		for i, v := range values {
-			fmt.Println(columns[i] + "_value: ", v)
-			fmt.Println(columns[i] + "_value: ", string(v))
-
-			//fmt.Printf("%s_point: %p, len: %d", columns[i], &v, len(v))
-
-			fmt.Println()
-		}
 		//TODO 数据量比较大的时候, allValues 中的数据会出错
 		allValues = append(allValues, &values)
 
-		//fmt.Printf("values: %p\n", &values)
-		fmt.Println("11111111111111111111111111")
-		//for _, va := range allValues {
-		//
-		//	//fmt.Printf("allValues: %p\n", va)
-		//	//for i, v := range *va {
-		//	//	//fmt.Println(columns[i] + "_value: " + string(v))
-		//	//
-		//	//	//fmt.Printf("%s_point: %p, len: %d\n", columns[i], &v, len(v))
-		//	//}
-		//	//fmt.Println()
-		//}
-		fmt.Println("2222222222222222222222222")
 
 	}
 
@@ -1063,6 +1091,8 @@ func (session *Session)clearSession() {
 
 	session.where = ""
 	session.args = []interface{}{}
+	session.joinArgs = []interface{}{}
+	session.whereArgs = []interface{}{}
 	session.limit = ""
 	session.order = ""
 	session.group = ""
@@ -1070,5 +1100,52 @@ func (session *Session)clearSession() {
 
 	session.prepare = ""
 
+
+}
+
+func (session *Session)printSql(sql string) {
+
+	ss := strings.Split(sql, "?")
+
+	newSql := ""
+	for i, s := range ss {
+
+		newSql += " " + s
+		if i < len(session.args) {
+			a := session.args[i]
+
+			if n, ok := a.(string); ok {
+				newSql += " " + n
+			} else if n, ok := a.(int); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(int8); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(int16); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(int32); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(int64); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(uint); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(uint8); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(uint16); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(uint32); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(uint64); ok {
+				newSql += " " + strconv.FormatInt(int64(n), 10)
+			} else if n, ok := a.(float32); ok {
+				newSql += " " + strconv.FormatFloat(float64(n), 'f', -1, 32)
+			} else if n, ok := a.(float64); ok {
+				newSql += " " + strconv.FormatFloat(n, 'f', -1, 64)
+			} else if n, ok := a.(bool); ok {
+				newSql += " " + strconv.FormatBool(n)
+			}
+		}
+	}
+
+	log.Println(newSql)
 
 }
