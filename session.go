@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //记录每次sql操作的信息
@@ -624,11 +625,24 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 
 
 		switch v.(type) {
-		case string, int, float64:
+		case
+			string,
+			int,
+			int8,
+			int16,
+			int32,
+			int64,
+			uint,
+			uint8,
+			uint16,
+			uint32,
+			uint64,
+			float32,
+			float64:
 
-			session.where += "=?"
+				session.where += "=?"
 
-			session.whereArgs = append(session.whereArgs, v)
+				session.whereArgs = append(session.whereArgs, v)
 
 		case []interface{}:
 
@@ -652,9 +666,22 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 				case "IN":
 
 					switch v1.(type) {
-					case string, int, float64:
-						session.where += t + " (?) "
-						session.whereArgs = append(session.whereArgs, v1)
+					case
+						string,
+						int,
+						int8,
+						int16,
+						int32,
+						int64,
+						uint,
+						uint8,
+						uint16,
+						uint32,
+						uint64,
+						float32,
+						float64:
+							session.where += t + " (?) "
+							session.whereArgs = append(session.whereArgs, v1)
 					case []int:
 						session.where += t + " ("
 
@@ -826,9 +853,15 @@ func (session *Session) setValues(columns []string, values []sql.RawBytes, t ref
 
 		f := v.FieldByName(fieldInfo.AttrName)
 
+		//能处理的数据结构提示
+		alertLog := "zyorm 中没有处理 model 中数据类型, 暂时只可以处理(string/int/int8-64/uint/uint8-64/float32-64/bool/time.Time)"
+
 		if valueBytes != nil {
 			value := string(valueBytes)
 
+			fmt.Println(f.Kind())
+
+			fmt.Println(f.Type())
 
 			switch f.Kind() {
 			case reflect.String:
@@ -876,6 +909,21 @@ func (session *Session) setValues(columns []string, values []sql.RawBytes, t ref
 				} else {
 					f.SetBool(boolV)
 				}
+			case reflect.Struct:
+				if f.Type().String() == "time.Time" {
+					t, e := time.Parse("2006-01-02 15:04:05", value)
+
+					if e == nil {
+						f.Set(reflect.ValueOf(time.Unix(0,0)))
+					} else {
+						f.Set(reflect.ValueOf(t))
+					}
+				} else {
+					log.Println(alertLog)
+				}
+
+			default:
+				log.Println(alertLog)
 			}
 		} else {
 			switch f.Kind() {
@@ -901,7 +949,14 @@ func (session *Session) setValues(columns []string, values []sql.RawBytes, t ref
 					f.SetFloat(0)
 			case reflect.Bool:
 					f.SetBool(false)
-
+			case reflect.Struct:
+				if f.Type().String() == "time.Time" {
+					f.Set(reflect.ValueOf(time.Unix(0,0)))
+				} else {
+					log.Println(alertLog)
+				}
+			default:
+				log.Println(alertLog)
 
 			}
 		}
