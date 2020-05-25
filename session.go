@@ -3,7 +3,6 @@ package zyorm
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"log"
 	"reflect"
 	"strconv"
@@ -854,9 +853,6 @@ func (session *Session) setValues(columns []string, values []sql.RawBytes, t ref
 		if valueBytes != nil {
 			value := string(valueBytes)
 
-			fmt.Println(f.Kind())
-
-			fmt.Println(f.Type())
 
 			switch f.Kind() {
 			case reflect.String:

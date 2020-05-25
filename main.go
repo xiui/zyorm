@@ -2,7 +2,6 @@ package zyorm
 
 import (
 	"database/sql"
-	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"reflect"
@@ -149,9 +148,6 @@ func (engine *Engine) registerTable(t reflect.Type) error {
 	} else {
 		tableName = structName
 	}
-
-	fmt.Println("structName: ", structName)
-	fmt.Println("tableName: ", tableName)
 
 	tableInfo := TableInfo{
 		Name: strings.ToLower(tableName),
