@@ -164,7 +164,6 @@ func (session *Session) Insert(data map[string]interface{}) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-
 	return lastInsertId, nil
 
 }
@@ -191,13 +190,9 @@ func (session *Session) Update(data map[string]interface{}) (int64, error) {
 		} else {
 			setStr += "`" + k + "`" + "=?"
 		}
-
 		args = append(args, v)
-
 	}
 
-
-	
 	sqlstr := "UPDATE " + session.TableName + " SET " + setStr  //kstr + " VALUES " + vstr
 
 	if len(session.where) > 0 {
@@ -325,19 +320,19 @@ func (session *Session) Find(p interface{}) (bool, error) {
 
 	stmtOut, err := db.Prepare(sqlstr)
 	if err != nil {
-		log.Printf("prepare error: %s", err)
+		log.Printf("prepare error: %s\n", err)
 		return false, err
 	}
 	defer stmtOut.Close()
 
 	rows, err := stmtOut.Query(session.args...)
 	if err != nil {
-		log.Printf("Query error: %s", err)
+		log.Printf("Query error: %s\n", err)
 		return false, err
 	}
 
 	if err = rows.Err(); err != nil {
-		log.Printf("rows Err: %s", err)
+		log.Printf("rows Err: %s\n", err)
 		return false, err
 	}
 	defer rows.Close()
@@ -345,7 +340,7 @@ func (session *Session) Find(p interface{}) (bool, error) {
 
 	columns, err := rows.Columns()
 	if err != nil {
-		log.Printf("get Columns error: %s", err)
+		log.Printf("get Columns error: %s\n", err)
 		return false, err
 	}
 
@@ -362,7 +357,7 @@ func (session *Session) Find(p interface{}) (bool, error) {
 
 	err = rows.Scan(scanArgs...)
 	if err != nil {
-		log.Printf("get Scan error: %s", err)
+		log.Printf("get Scan error: %s\n", err)
 		return false, err
 	}
 
@@ -399,7 +394,7 @@ func (session *Session) Select(p interface{}) error {
 
 	stmtOut, err := db.Prepare(sqlstr)
 	if err != nil {
-		log.Printf("prepare error: %s", err)
+		log.Printf("prepare error: %s\n", err)
 		return err
 	}
 
@@ -407,12 +402,12 @@ func (session *Session) Select(p interface{}) error {
 
 	rows, err := stmtOut.Query(session.args...)
 	if err != nil {
-		log.Printf("Query error: %s", err)
+		log.Printf("Query error: %s\n", err)
 		return err
 	}
 
 	if err = rows.Err(); err != nil {
-		log.Printf("rows Err: %s", err)
+		log.Printf("rows Err: %s\n", err)
 		return err
 	}
 
@@ -421,7 +416,7 @@ func (session *Session) Select(p interface{}) error {
 
 	columns, err := rows.Columns()
 	if err != nil {
-		log.Printf("get Columns error: %s", err)
+		log.Printf("get Columns error: %s\n", err)
 		return err
 	}
 
@@ -441,7 +436,7 @@ func (session *Session) Select(p interface{}) error {
 
 		err = rows.Scan(scanArgs...)
 		if err != nil {
-			log.Printf("get Scan error: %s", err)
+			log.Printf("get Scan error: %s\n", err)
 			return err
 		}
 
@@ -1082,26 +1077,26 @@ func (session *Session) getRows(sqlstr string) ([]string, *[]*[]sql.RawBytes, er
 
 	stmtOut, err := db.Prepare(sqlstr)
 	if err != nil {
-		log.Printf("prepare error: %s", err)
+		log.Printf("prepare error: %s\n", err)
 		return nil, nil, err
 	}
 	defer stmtOut.Close()
 
 	rows, err := stmtOut.Query(session.args...)
 	if err != nil {
-		log.Printf("Query error: %s", err)
+		log.Printf("Query error: %s\n", err)
 		return nil, nil, err
 	}
 
 	if err = rows.Err(); err != nil {
-		log.Printf("rows Err: %s", err)
+		log.Printf("rows Err: %s\n", err)
 		return nil, nil, err
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
-		log.Printf("get Columns error: %s", err)
+		log.Printf("get Columns error: %s\n", err)
 		return nil, nil, err
 	}
 
@@ -1118,27 +1113,19 @@ func (session *Session) getRows(sqlstr string) ([]string, *[]*[]sql.RawBytes, er
 		scanArgs := make([]interface{}, len(values))
 		for i := range values {
 			scanArgs[i] = &values[i]
-
-			fmt.Printf("value-%d: ,%p\n", i, &values[i])
 		}
 
 		err = rows.Scan(scanArgs...)
 		if err != nil {
-			log.Printf("get Scan error: %s", err)
+			log.Printf("get Scan error: %s\n", err)
 			return nil, nil, err
 		}
 
 		//TODO 数据量比较大的时候, allValues 中的数据会出错
 		allValues = append(allValues, &values)
 
-
 	}
-
-
-
 	return columns, &allValues, nil
-
-
 }
 
 //TODO: 每次增删改查完之后, 清空一下
@@ -1154,7 +1141,6 @@ func (session *Session)clearSession() {
 	session.joins = []string{}
 
 	session.prepare = ""
-
 
 }
 
