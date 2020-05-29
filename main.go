@@ -107,11 +107,11 @@ func (engine *Engine) OrWhere(wheres map[string]interface{}) *Session {
 
 }
 
-func (engine *Engine) Limit(limit string) *Session {
+func (engine *Engine) Limit(args ...interface{}) *Session {
 
 	session := engine.createSession()
 
-	return session.Limit(limit)
+	return session.Limit(args...)
 }
 
 func (engine *Engine) Order(order string) *Session {
