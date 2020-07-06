@@ -455,11 +455,6 @@ func (session *Session) Count() (int64, error) {
 		session.args = append(session.args, session.whereArgs...)
 	}
 
-	//根据设置输出 sql
-	if session.Engine.ShowSql {
-		session.printSql(s)
-	}
-
 	m, err := session.Prepare(s).Query(session.args...)
 
 	if err != nil {
