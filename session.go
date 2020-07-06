@@ -74,24 +74,12 @@ func (session *Session)Query(args ...interface{}) ([]map[string]string, error) {
 		session.printSql(session.prepare)
 	}
 
-	columns, valuess,err := session.getRows(session.prepare)
+	_, allValues,err := session.getRows(session.prepare)
 	if err != nil {
 		return nil, err
 	}
 
-	var maps []map[string]string
-
-	for _, values := range *valuess {
-
-		mapElement := make(map[string]string)
-		for i, column := range columns {
-			mapElement[column] = string((*values)[i])
-		}
-
-		maps = append(maps, mapElement)
-	}
-
-	return maps, nil
+	return *allValues, nil
 
 }
 
@@ -1066,7 +1054,7 @@ func (session *Session) getSqlStr(t reflect.Type) (string, error) {
 	return sqlstr, nil
 }
 
-func (session *Session) getRows(sqlstr string) ([]string, *[]*[]sql.RawBytes, error) {
+func (session *Session) getRows(sqlstr string) ([]string, *[]map[string]string, error) {
 
 
 	db := session.Engine.db
@@ -1097,8 +1085,8 @@ func (session *Session) getRows(sqlstr string) ([]string, *[]*[]sql.RawBytes, er
 	}
 
 
-	var allValues = make([]*[]sql.RawBytes, 0)
 
+	var allValues = []map[string]string{}
 
 	//循环输出 mysql 返回数据
 	for rows.Next() {
@@ -1117,8 +1105,12 @@ func (session *Session) getRows(sqlstr string) ([]string, *[]*[]sql.RawBytes, er
 			return nil, nil, err
 		}
 
-		//TODO 数据量比较大的时候, allValues 中的数据会出错
-		allValues = append(allValues, &values)
+		m := map[string]string{}
+		for i, v := range values {
+			m[columns[i]] = string(v)
+		}
+		allValues = append(allValues, m)
+
 
 	}
 	return columns, &allValues, nil
