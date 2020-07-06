@@ -331,21 +331,29 @@ func (session *Session) Find(p interface{}) (bool, error) {
 		return false, err
 	}
 
-	//只查一条, 所以不用循环
-	rows.Next()
+	var values []sql.RawBytes
 
-	//切片是地址, 所以每次都重新创建 values, scanArgs
-	values := make([]sql.RawBytes, len(columns))
+	for rows.Next() {
+		//切片是地址, 所以每次都重新创建 values, scanArgs
+		values = make([]sql.RawBytes, len(columns))
 
-	scanArgs := make([]interface{}, len(values))
-	for i := range values {
-		scanArgs[i] = &values[i]
+		scanArgs := make([]interface{}, len(values))
+		for i := range values {
+			scanArgs[i] = &values[i]
+		}
+
+		err = rows.Scan(scanArgs...)
+		if err != nil {
+			log.Printf("get Scan error: %s\n", err)
+			return false, err
+		}
+
+		//只查一条, 所以循环一次退出
+		break
 	}
 
-	err = rows.Scan(scanArgs...)
-	if err != nil {
-		log.Printf("get Scan error: %s\n", err)
-		return false, err
+	if len(values) < 1 {
+		return false, nil
 	}
 
 	session.setValues(columns, values, t, realV)
