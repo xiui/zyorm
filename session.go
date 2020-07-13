@@ -303,9 +303,13 @@ func (session *Session) Find(p interface{}) (bool, error) {
 	}
 
 	//根据 sql 查数据
-	db := session.Engine.db
+	var stmtOut *sql.Stmt
+	if session.Tx != nil {
+		stmtOut, err = session.Tx.Prepare(sqlstr)
+	} else {
+		stmtOut, err = session.Engine.db.Prepare(sqlstr)
+	}
 
-	stmtOut, err := db.Prepare(sqlstr)
 	if err != nil {
 		log.Printf("prepare error: %s\n", err)
 		return false, err
@@ -380,14 +384,18 @@ func (session *Session) Select(p interface{}) error {
 		session.printSql(sqlstr)
 	}
 
-
 	if err != nil {
 		return err
 	}
 
-	db := session.Engine.db
+	var stmtOut *sql.Stmt
 
-	stmtOut, err := db.Prepare(sqlstr)
+	if session.Tx != nil {
+		stmtOut, err = session.Tx.Prepare(sqlstr)
+	} else {
+		stmtOut, err = session.Engine.db.Prepare(sqlstr)
+	}
+
 	if err != nil {
 		log.Printf("prepare error: %s\n", err)
 		return err
@@ -1060,9 +1068,16 @@ func (session *Session) getSqlStr(t reflect.Type) (string, error) {
 func (session *Session) getRows(sqlstr string) ([]string, *[]map[string]string, error) {
 
 
-	db := session.Engine.db
+	var stmtOut *sql.Stmt
+	var err error
 
-	stmtOut, err := db.Prepare(sqlstr)
+	if session.Tx != nil {
+		stmtOut, err = session.Tx.Prepare(sqlstr)
+	} else {
+		stmtOut, err = session.Engine.db.Prepare(sqlstr)
+	}
+
+
 	if err != nil {
 		log.Printf("prepare error: %s\n", err)
 		return nil, nil, err
