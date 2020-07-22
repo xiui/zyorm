@@ -119,6 +119,7 @@ func (session *Session) Insert(data map[string]interface{}) (int64, error) {
 
 	sqlstr := "INSERT " + session.TableName + kstr + " VALUES " + vstr
 
+	session.args = args
 	//根据设置输出 sql
 	if session.Engine.ShowSql {
 		session.printSql(sqlstr)
@@ -187,6 +188,7 @@ func (session *Session) Update(data map[string]interface{}) (int64, error) {
 		args = append(args, session.whereArgs...)
 	}
 
+	session.args = args
 	//根据设置输出 sql
 	if session.Engine.ShowSql {
 		session.printSql(sqlstr)
