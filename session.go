@@ -428,8 +428,13 @@ func (session *Session) Select(p interface{}) error {
 
 	elements := make([]reflect.Value, 0)
 
+	//判断是否有值, 如果没有, 根据
+	hasValue := false
+
 	//循环输出 mysql 返回数据
 	for rows.Next() {
+
+		hasValue = true
 
 		//切片是地址, 所以每次都重新创建 values, scanArgs
 		values := make([]sql.RawBytes, len(columns))
@@ -449,8 +454,15 @@ func (session *Session) Select(p interface{}) error {
 		elements = append(elements, reflect.ValueOf(v.Interface()))
 
 	}
-	tmp := reflect.Append(realV, elements...)
-	realV.Set(tmp)
+
+	if !hasValue && session.Engine.SelectNilSlice2EmptySlice {
+
+		//如果没有数据, 并且设置 SelectNilSlice2EmptySlice 为 true, 这里赋值空数组
+		realV.Set(reflect.MakeSlice(realV.Type(), 0, 0))
+	} else {
+		tmp := reflect.Append(realV, elements...)
+		realV.Set(tmp)
+	}
 
 	return nil
 

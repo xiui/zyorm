@@ -14,6 +14,9 @@ type Engine struct {
 
 	ShowSql bool
 
+	//用 select 查询时, 用 var a type时, 如果没有数据, 返回后 json 化的时候, 会解析成 null, 如果想解析成空数组 [], 这里加个判断, 在查不到数据时, 处理成空数组
+	SelectNilSlice2EmptySlice bool
+
 	rwMuTables *sync.RWMutex
 	tables map[string]TableInfo
 
