@@ -18,6 +18,8 @@ type Session struct {
 	TableName string
 
 	Engine *Engine
+
+	fields string
 	where string
 	limit string
 	order string
@@ -59,7 +61,7 @@ func (session *Session) Prepare(sqlstr string) *Session {
 	return session
 }
 
-func (session *Session)Query(args ...interface{}) ([]map[string]string, error) {
+func (session *Session) Query(args ...interface{}) ([]map[string]string, error) {
 
 	defer session.clearSession()
 
@@ -491,6 +493,11 @@ func (session *Session) Count() (int64, error) {
 
 	return count, err
 
+}
+
+func (session *Session) Fields(fields string) *Session {
+	session.fields = fields
+	return session
 }
 
 func (session *Session) Where(wheres map[string]interface{}) *Session {
@@ -1015,38 +1022,42 @@ func (session *Session) getSqlStr(t reflect.Type) (string, error) {
 	}
 
 
-	tableFields := tableInfo.Fields
-
-	var fields []string
-
-	for _, v := range tableFields {
 
 
+	var fieldStr string
 
-		field := ""
+	if len(session.fields) > 0 {
+		fieldStr = session.fields
+	} else {
 
-		if v.TableName != "" {
-			field += v.TableName + "."
+		tableFields := tableInfo.Fields
+		var fields []string
+		for _, v := range tableFields {
+
+			field := ""
+
+			if v.TableName != "" {
+				field += v.TableName + "."
+			}
+
+
+
+			field += "`"+v.FieldName+"`"
+
+
+
+			if v.AsName != "" {
+				field += " `" + v.AsName + "`"
+			}
+
+
+
+			fields = append(fields, field)
 		}
 
 
-
-		field += "`"+v.FieldName+"`"
-
-
-
-		if v.AsName != "" {
-			field += " `" + v.AsName + "`"
-		}
-
-
-
-		fields = append(fields, field)
+		fieldStr = strings.Join(fields, ",")
 	}
-
-
-	fieldStr := strings.Join(fields, ",")
-
 
 	sqlstr := "SELECT " + fieldStr + " FROM " + tableInfo.Name
 

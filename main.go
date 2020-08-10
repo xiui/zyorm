@@ -94,6 +94,13 @@ func (engine *Engine) Select(p interface{}) error {
 	return session.Select(p)
 }
 
+func (engine *Engine) Fields(fields string) *Session {
+
+	session := engine.createSession()
+	return session.Fields(fields)
+
+}
+
 func (engine *Engine) Where(wheres map[string]interface{}) *Session {
 
 	session := engine.createSession()
