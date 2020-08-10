@@ -5,6 +5,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -152,59 +153,92 @@ func (engine *Engine) registerTable(t reflect.Type) error {
 
 	structName := t.Name()
 
-	var tableName string
-	if i := strings.Index(structName, "_JOIN"); i > 0 {
-		tableName = structName[:i]
-	} else {
-		tableName = structName
-	}
+	var tableName = structName
 
 	tableInfo := TableInfo{
-		Name: strings.ToLower(tableName),
 		RWRuField: new(sync.RWMutex),
 		Fields: make(map[string]FieldInfo),
 	}
 
-	for i := 0; i < t.NumField(); i ++ {
+	ts := []reflect.Type{t}
 
-		attributeName := t.Field(i).Name
-		fieldName := t.Field(i).Tag.Get("zyfield")
-		asName := t.Field(i).Tag.Get("zyas")
+	hasIsTable := false
+	for len(ts) > 0 {
+		t := ts[0]
+		ts = ts[1:]
 
-		//获取 zytable tag 中的 表名, 如果没有, 就使用 tableName
-		zytableName := t.Field(i).Tag.Get("zytable")
-		if len(zytableName) < 1 {
-			zytableName = strings.ToLower(tableName)
+		for i := 0; i < t.NumField(); i ++ {
+
+			if t.Field(i).Type.Kind().String() == "struct" {
+				ts = append(ts, t.Field(i).Type)
+				continue
+			}
+
+			attributeName := t.Field(i).Name
+			fieldName := t.Field(i).Tag.Get("zyfield")
+			asName := t.Field(i).Tag.Get("zyas")
+
+			//获取 zytable tag 中的 表名, 如果没有, 就使用 tableName
+			zytableName := t.Field(i).Tag.Get("zytable")
+
+			zyisTableName := t.Field(i).Tag.Get("zyis_tablename")
+			if len(zyisTableName) > 0 {
+				isTablename, err := strconv.ParseBool(zyisTableName)
+				if err != nil {
+					log.Println(err)
+				}
+
+				//如果指明此字段表示表名, 则不添加了
+				if isTablename {
+
+					if hasIsTable {
+						log.Println("zyis_tablename more than 1, please check you code")
+						continue
+					}
+
+					hasIsTable = true
+
+					tableName = strings.ToLower(attributeName)
+					continue
+				}
+			}
+
+
+
+			if len(zytableName) < 1 {
+				zytableName = strings.ToLower(tableName)
+			}
+
+
+			if fieldName == "-" {
+				continue
+			}
+
+			if fieldName == "" {
+				fieldName = strings.ToLower(attributeName)
+			}
+
+			//
+			if asName == "" {
+				asName = fieldName
+			}
+
+
+			tableInfo.RWRuField.Lock()
+
+			tableInfo.Fields[asName] = FieldInfo{
+				AttrName: attributeName,
+				FieldName: fieldName,
+				AsName: asName,
+				TableName: zytableName,
+			}
+
+			tableInfo.RWRuField.Unlock()
 		}
-
-
-
-		if fieldName == "-" {
-			continue
-		}
-
-		if fieldName == "" {
-			fieldName = strings.ToLower(attributeName)
-		}
-
-		//
-		if asName == "" {
-			asName = fieldName
-		}
-
-
-		tableInfo.RWRuField.Lock()
-
-		tableInfo.Fields[asName] = FieldInfo{
-								AttrName: attributeName,
-								FieldName: fieldName,
-								AsName: asName,
-								TableName: zytableName,
-							}
-
-		tableInfo.RWRuField.Unlock()
 	}
 
+
+	tableInfo.Name = strings.ToLower(tableName)
 	engine.tables[structName] = tableInfo
 
 	return nil
