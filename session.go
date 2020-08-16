@@ -85,6 +85,42 @@ func (session *Session) Query(args ...interface{}) ([]map[string]string, error) 
 
 }
 
+func (session *Session) Exec(args ...interface{}) (sql.Result, error) {
+
+	defer session.clearSession()
+
+	if len(session.prepare) < 1 {
+		return nil, errors.New("请先调用 Prepare方法")
+	}
+
+	session.args = args
+
+	//根据设置输出 sql
+	if session.Engine.ShowSql {
+		session.printSql(session.prepare)
+	}
+
+	var stmtIns *sql.Stmt
+	var err error
+
+	if session.Tx != nil {
+		stmtIns, err = session.Tx.Prepare(session.prepare)
+	} else {
+		stmtIns, err = session.Engine.db.Prepare(session.prepare)
+	}
+
+	if err != nil {
+		log.Printf("prepare error: %s\n", err)
+		return nil, err
+	}
+	defer stmtIns.Close()
+
+	res, err := stmtIns.Exec(session.args...)
+
+	return res, err
+
+}
+
 func (session *Session) Insert(data map[string]interface{}) (int64, error) {
 
 	defer session.clearSession()
