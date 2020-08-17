@@ -194,6 +194,108 @@ func (session *Session) Insert(data map[string]interface{}) (int64, error) {
 
 }
 
+func (session *Session) InsertAll(datas []map[string]interface{}) (int64, error) {
+
+	defer session.clearSession()
+
+	if len(session.TableName) < 1 {
+		return 0, errors.New("没有相应的表明")
+	}
+
+	if len(datas) < 1 {
+		return 0, errors.New("参数没有数据")
+	}
+
+	var args []interface{}
+
+	kdate := datas[0]
+
+	if len(kdate) < 1 {
+		return 0, errors.New("参数key没有数据")
+	}
+
+	keys := []string{}
+
+	kstr := "("
+	for k, _ := range kdate {
+		keys = append(keys, k)
+
+		if len(kstr) > 1 {
+			kstr += "," + "`" + k + "`"
+		} else {
+			kstr += "`" + k + "`"
+		}
+	}
+	kstr += ")"
+
+
+	values := ""
+	for _, data := range datas {
+
+		if len(values) > 0 {
+			values += ","
+		}
+
+		vstr := "("
+
+
+		for i, key := range keys {
+
+			if i == 0 {
+				vstr += "?"
+			} else {
+				vstr += ",?"
+			}
+
+			args = append(args, data[key])
+		}
+
+		vstr += ")"
+
+		values += vstr
+	}
+
+
+
+	sqlstr := "INSERT " + session.TableName + kstr + " VALUES " + values
+
+	session.args = args
+	//根据设置输出 sql
+	if session.Engine.ShowSql {
+		session.printSql(sqlstr)
+	}
+
+	var stmtIns *sql.Stmt
+	var err error
+
+	if session.Tx != nil {
+		stmtIns, err = session.Tx.Prepare(sqlstr)
+	} else {
+		stmtIns, err = session.Engine.db.Prepare(sqlstr)
+	}
+
+
+	if err != nil {
+		return 0, err
+	}
+
+	defer stmtIns.Close()
+
+	ret, err := stmtIns.Exec(args...)
+
+	if err != nil {
+		return 0, err
+	}
+
+	rowsAffected, err := ret.RowsAffected()
+
+	if err != nil {
+		return 0, err
+	}
+	return rowsAffected, nil
+
+}
+
 func (session *Session) Update(data map[string]interface{}) (int64, error) {
 
 	defer session.clearSession()
