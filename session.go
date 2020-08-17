@@ -210,6 +210,12 @@ func (session *Session) InsertAll(datas []map[string]interface{}) (int64, error)
 
 	kdate := datas[0]
 
+	if (len(kdate) * len(datas)) > 65535 {
+		//在一个sql 语句中，最大占位符数量是有限制的，最大值为16bit 无符号数的最大值，即65535。
+		//条数 len(datas) * 每条内容数量 len(kdate) 要小于65535
+		return 0, errors.New("占位符数量超过 65535")
+	}
+
 	if len(kdate) < 1 {
 		return 0, errors.New("参数key没有数据")
 	}
