@@ -824,8 +824,24 @@ func (session *Session) manageWhere(wheres map[string]interface{}) {
 				case "IN":
 
 					switch v1.(type) {
+					case string:
+						v1s := strings.Split(v1.(string), ",")
+						session.where += t + " ( "
+
+						for i, stringv := range v1s {
+
+							if i == 0 {
+								session.where += " ? "
+							} else {
+								session.where += " ,? "
+							}
+
+							session.whereArgs = append(session.whereArgs, stringv)
+						}
+						session.where += " ) "
+
 					case
-						string,
+
 						int,
 						int8,
 						int16,
